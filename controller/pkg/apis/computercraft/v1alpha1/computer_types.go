@@ -12,7 +12,7 @@ import (
 // +k8s:openapi-gen=true
 type ComputerSpec struct {
 	// ID of the computer
-	ID int `json:"id"`
+	ID int `json:"id,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

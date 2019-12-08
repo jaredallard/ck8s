@@ -1,0 +1,7 @@
+apiVersion: computercraft.ck8sd.com/v1alpha1
+kind: Computer
+metadata:
+  namespace: default
+  name: uuid
+spec:
+  id: 0
