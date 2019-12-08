@@ -1,0 +1,8 @@
+apiVersion: computercraft.ck8sd.com/v1alpha1
+kind: ComputerPod
+metadata:
+  namespace: default
+  name: my-pod
+spec:
+  computerType: advanced
+  pastebinID: uHRTm9hp

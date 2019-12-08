@@ -1,0 +1,26 @@
+--[[
+  Howlfile for ccDocker, thanks most to @SquidDev
+]]
+
+Sources:Main "cli/kubelet.lua"
+  :Depends "config"
+  :Depends "json"
+  :Depends "uuid"
+  :Depends "kubernetes"
+
+-- Ext apis (not ours)
+Sources:File "ext/json.lua"
+  :Name "json"
+Sources:File "ext/uuid.lua"
+  :Name "uuid"
+
+-- Libraries
+Sources:File "lib/kubernetes.lua"
+  :Name "kubernetes"
+
+-- Configuration
+Sources:File "config.lua"
+  :Name "config"
+
+Tasks:Clean("clean", "build")
+Tasks:Combine("combine", Sources, "build/kubelet", {"clean"}):Verify()

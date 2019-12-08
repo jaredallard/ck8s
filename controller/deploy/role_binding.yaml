@@ -1,0 +1,24 @@
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: ck8sd
+subjects:
+- kind: ServiceAccount
+  name: ck8sd
+roleRef:
+  kind: Role
+  name: ck8sd
+  apiGroup: rbac.authorization.k8s.io
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: ck8sd-computers
+subjects:
+- kind: ServiceAccount
+  name: ck8sd-computers
+roleRef:
+  kind: Role
+  name: ck8sd-computers
+  apiGroup: rbac.authorization.k8s.io
+
