@@ -6,7 +6,16 @@ local log = {
 
 function log.logger(prefix, color, message)
   -- prefix w/ time
-  write(os.time().." ")
+  local time = tostring(os.clock())
+  if #time == 5 then
+    time = time .. " "
+  elseif #time == 4 then -- make the time look better when <5 chars
+    time = time .. "  "
+  elseif #time == 3 then
+    time = time .. "   "
+  end
+
+  write(time.." ")
   -- color the prefix
   term.setTextColor(colors[color])
   write(prefix.." ")
@@ -14,6 +23,13 @@ function log.logger(prefix, color, message)
 
   -- print out the rest of the message
   print(message)
+end
+
+-- fatal is error, but it restarts the computer in a set amount of seconds
+function log:Fatal(msg)
+  self:Error(msg)
+  os.sleep(2)
+  os.reboot()
 end
 
 function log:Info(msg)
