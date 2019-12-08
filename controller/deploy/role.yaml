@@ -91,6 +91,14 @@ rules:
   resources:
   - computerpods
   verbs:
+  - list
   - get
   - patch
   - update
+- apiGroups:
+  - computercraft.ck8sd.com
+  resources:
+  - computerpods/status
+  verbs:
+  - get
+  - patch

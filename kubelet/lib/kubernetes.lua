@@ -88,4 +88,26 @@ function kubernetes:get(path)
   return resp, data
 end
 
+-- list returns a list of pods
+function kubernetes:list(path, fieldSelector)
+  if type(self) ~= 'table' then
+    error("kubernetes must be called with :")
+  end
+
+  local url = self.host.."/"..path
+  if fieldSelector ~= nil then
+    url = url .. "?fieldSelector=" .. fieldSelector
+  end
+
+  local resp, err = http.get(url, getHeaders(self))
+  if resp == nil then
+    return nil, err
+  end
+
+  local data = json:decode(resp.readAll())
+  resp.close()
+
+  return resp, data
+end
+
 return kubernetes
