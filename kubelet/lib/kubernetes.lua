@@ -110,4 +110,40 @@ function kubernetes:list(path, fieldSelector)
   return resp, data
 end
 
+---
+--- specific functions
+---
+
+function kubernetes:updateComputerStatus(status)
+  return kubernetes:patch("apis/computercraft.ck8sd.com/v1alpha1/namespaces/default/computers/"..MACHINEID.."/status", status)
+end
+
+function kubernetes:updateComputerPodStatus(name, status)
+  return kubernetes:patch("apis/computercraft.ck8sd.com/v1alpha1/namespaces/default/computerpods/"..name.."/status", status)
+end
+
+function kubernetes:registerComputer()
+  local computer = {
+    apiVersion = "computercraft.ck8sd.com/v1alpha1",
+    kind = "Computer",
+    metadata = {
+      namespace = "default",
+      name = MACHINEID,
+    },
+    spec = {
+      ID = os.getComputerID(),
+    },
+  }
+
+  return kubernetes:post("apis/computercraft.ck8sd.com/v1alpha1/namespaces/default/computers", computer)
+end
+
+function kubernetes:getComputerPods()
+  return kubernetes:list("apis/computercraft.ck8sd.com/v1alpha1/namespaces/default/computerpods")
+end
+
+function kubernetes:version()
+  return kubernetes:get("/version")
+end
+
 return kubernetes

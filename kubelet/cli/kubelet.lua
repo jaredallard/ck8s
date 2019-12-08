@@ -10,11 +10,24 @@ local runningPods = {}
 local tFilters    = {}
 local _routines   = {}
 
-print("started at "..os.time())
+print("ck8s kubelet version v"..kubeletVersion)
+log:Info("started at (in-game time): "..os.time())
 
 kubernetes:init(config.kubernetes, config.svc_account_token)
 
+local resp, body = kubernetes:version()
+if resp == nil then
+  error("failed to reach kubernetes: "..body)
+end
+
+log:Info("remote kubernetes is version: "..body.gitVersion)
+log:Info("remote kubernetes is running on: "..body.platform)
+
+-- globals
 MACHINEID = ""
+
+-- register our computer with Kubernetes
+-- TODO(jaredallard): add retries
 if not fs.exists(uuidFile) then
   local id = string.lower(tostring(uuid.Generate()))
   
@@ -23,21 +36,7 @@ if not fs.exists(uuidFile) then
   f.close()
 
   MACHINEID = id
-  print("starting computer registration: "..config.kubernetes)
-
-  local computer = {
-    apiVersion = "computercraft.ck8sd.com/v1alpha1",
-    kind = "Computer",
-    metadata = {
-      namespace = "default",
-      name = id,
-    },
-    spec = {
-      ID = os.getComputerID(),
-    },
-  }
-
-  local resp, body = kubernetes:post("apis/computercraft.ck8sd.com/v1alpha1/namespaces/default/computers", computer)
+  local resp, body = kubernetes:registerComputer()
   if resp == nil then
     error("failed to register computer: "..body)
   end
@@ -61,18 +60,83 @@ local status = {
   }
 }
 
-local resp, body = kubernetes:patch("apis/computercraft.ck8sd.com/v1alpha1/namespaces/default/computers/"..MACHINEID.."/status", status)
+local resp, body = kubernetes:updateComputerStatus(status)
 if resp == nil then
-  print("[warn] failed to update node status: "..body)
+  error("failed to update computer status")
 end
-print("updated computer status")
+
+log:Info("registered computer status with Kubernetes")
+
+-- create pod creates a new pod, it does so by fetching source code from a provider
+-- and then runs it inside of a coroutine
+local function createPod(pod)
+  log:Info("creating pod "..pod.metadata.uid)
+  local resp, err = kubernetes:updateComputerPodStatus(pod.metadata.name, {
+    status = {
+      phase = "Running"
+    }
+  })
+  if resp == nil then
+    log:Warn("failed to update computerpod status: "..err)
+  end
+
+  -- TODO(jaredallard): have better support for things other than URLs
+  if pod.spec.url == "" then
+    log:Error("pod doesn't have a URL")
+    return nil
+  end
+
+  log:Info("downloading source code from pod url")
+  local resp, err = http.get(pod.spec.url)
+  if resp == nil then
+    log:Error("failed to download source code: "..err)
+    return nil
+  end
+
+  local src = resp.readAll()
+  resp.close()
+
+  local srcFile = "/tmp/src/"..pod.metadata.uid..".lua"
+  local f = fs.open(srcFile, "w")
+  f.write(src)
+  f.close()
+
+  -- TODO(jaredallard): logic to create the pod here
+  log:Info("creating coroutine for pod")
+  return coroutine.create(function ()
+    os.run({}, srcFile)
+  end)
+end
+
+-- removePod removes a pod from the in-memory store and updates it's remote status
+-- TODO(jaredallard): add support for errored state
+local function removePod(podID)
+  log:Info("cleaning up pod "..podID)
+
+  local pod = runningPods[podID]
+  local resp, err = kubernetes:updateComputerPodStatus(pod.metadata.name, {
+    status = {
+      phase = "Terminated"
+    }
+  })
+  if resp == nil then
+    log:Warn("failed to update computerpod status: "..err)
+  end
+
+  -- remove the coroutine from the process manager, effectively killing it
+  -- TODO(jaredallard): handle this more gracefully
+  _routines[podID] = nil
+
+  -- remove the pod from the in-memory store so that we don't handle it anymore
+  runningPods[podID] = nil
+end
 
 -- controlLoop handles the creation of new pods and the management of coroutines
 local function controlLoop()
   while true do
-    local resp, body = kubernetes:list("apis/computercraft.ck8sd.com/v1alpha1/namespaces/default/computerpods")
+    local resp, body = kubernetes:getComputerPods()
     if resp == nil then
-      print("failed to list pods: "..body)
+      log:Warn("failed to list pods: "..body)
     end
 
     local ourPods = {}
@@ -90,14 +154,8 @@ local function controlLoop()
       -- check if our pods exist in the remove state, if it doesn't then
       -- it's likely been removed
       if foundPods[podID] ~= true then
-        print("pod "..podID.." has been removed")
-
-        -- remove the coroutine from the process manager, effectively killing it
-        -- TODO(jaredallard): handle this more gracefully
-        _routines[podID] = nil
-
-        -- remove the pod from the in-memory store so that we don't handle it anymore
-        runningPods[podID] = nil
+        log:Info("pod "..podID.." has been removed")
+        removePod(podID)
       end
     end 
 
@@ -107,18 +165,19 @@ local function controlLoop()
 
       -- we need to create the pod
       if runningPods[podID] == nil then
-        print("creating pod "..podID)
-
         -- track that the pod is running in-memory
-        runningPods[podID] = true
+        runningPods[podID] = pod
 
         -- TODO: update the kubernetes apiserver with the status of the pod
-        _routines[podID] = coroutine.create(function ()
-          while true do
-            print("POD: I'm running!")
-            os.sleep(2)
-          end
-        end)
+        local r = createPod(pod)
+
+        log:Info("created pod "..podID)
+        if r == nil then
+          log:Warn("failed to run pod")
+        else
+          _routines[podID] = r
+          log:Info("started pod "..podID)
+        end
       end
     end
 
@@ -127,20 +186,18 @@ local function controlLoop()
 end
 
 
-print("starting process manager")
+log:Info("starting process manager")
 _routines["main"] = coroutine.create(controlLoop)
 
 -- coroutine manager, adapted from: https://pastebin.com/2yYLywGK
 local event, p1, p2, p3, p4, p5
 while true do
-  local i = 1
   for k, r in pairs(_routines) do
     if r then
       if r and coroutine.status(r) == "dead" then
         -- TODO(jaredallard): handle dead coroutine
-        print("coroutine is dead")
-        _routines[k] = nil
-      else 
+        removePod(k)
+      else
         if tFilters[k] == nil or tFilters[r] == event or event == "terminate" then
           local ok, param = coroutine.resume(r, event, p1, p2, p3, p4, p5)
           if not ok then
@@ -151,7 +208,7 @@ while true do
 
           -- remove dead coroutines
           if coroutine.status(r) == "dead" then
-            _routines[k] = nil
+            removePod(k)
           end
         end
       end

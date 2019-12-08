@@ -4,6 +4,7 @@
 
 Sources:Main "cli/kubelet.lua"
   :Depends "config"
+  :Depends "log"
   :Depends "json"
   :Depends "uuid"
   :Depends "kubernetes"
@@ -17,6 +18,8 @@ Sources:File "ext/uuid.lua"
 -- Libraries
 Sources:File "lib/kubernetes.lua"
   :Name "kubernetes"
+  Sources:File "lib/log.lua"
+  :Name "log"
 
 -- Configuration
 Sources:File "config.lua"
