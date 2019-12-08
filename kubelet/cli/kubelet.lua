@@ -3,43 +3,45 @@
 -- (c) 2019 ck8s project authors
 --
 -- Kublet: a ComputerPod runner for ck8s
-local kubeletVersion = "0.1.0"
 local uuidFile = "/var/ck8s/uuid"
 
 local runningPods = {}
 local tFilters    = {}
 local _routines   = {}
 
-print("ck8s kubelet version v"..kubeletVersion)
+-- globals
+MACHINEID = ""
+KUBELETVERSION = "v0.1.0"
+
+print("ck8s kubelet version "..KUBELETVERSION)
 log:Info("started at (in-game time): "..os.time())
 
 kubernetes:init(config.kubernetes, config.svc_account_token)
 
 local resp, body = kubernetes:version()
 if resp == nil then
-  error("failed to reach kubernetes: "..body)
+  log:Fatal("failed to reach kubernetes: "..body)
 end
 
 log:Info("remote kubernetes is version: "..body.gitVersion)
 log:Info("remote kubernetes is running on: "..body.platform)
 
--- globals
-MACHINEID = ""
 
 -- register our computer with Kubernetes
 -- TODO(jaredallard): add retries
 if not fs.exists(uuidFile) then
   local id = string.lower(tostring(uuid.Generate()))
-  
-  local f = fs.open(uuidFile, "w")
-  f.write(id)
-  f.close()
 
   MACHINEID = id
   local resp, body = kubernetes:registerComputer()
   if resp == nil then
-    error("failed to register computer: "..body)
+    print("ComputerID: "..MACHINEID)
+    log:Fatal("failed to register computer: "..body)
   end
+
+  local f = fs.open(uuidFile, "w")
+  f.write(id)
+  f.close()
 else
   -- read our machine ID from a file if it wasn't just registered
   local f = fs.open(uuidFile, "r")
@@ -47,22 +49,11 @@ else
   f.close()
 end
 
-local status = {
-  status = {
-    phase = "Running",
-    nodeInfo = {
-      machineID = tostring(MACHINEID),
-      kernelVersion = os.version(),
-      kubeletVersion = kubeletVersion,
-      operatingSystem = "craftos",
-      architecture = "java"
-    }
-  }
-}
 
-local resp, body = kubernetes:updateComputerStatus(status)
+local resp, err = kubernetes:updateComputerStatus()
 if resp == nil then
-  error("failed to update computer status")
+  print("ComputerID: "..MACHINEID)
+  log:Fatal("failed to update computer status: "..err)
 end
 
 log:Info("registered computer status with Kubernetes")
@@ -73,7 +64,9 @@ local function createPod(pod)
   log:Info("creating pod "..pod.metadata.uid)
   local resp, err = kubernetes:updateComputerPodStatus(pod.metadata.name, {
     status = {
-      phase = "Running"
+      phase = "Running",
+      message = "",
+      reason = "",
     }
   })
   if resp == nil then
@@ -201,7 +194,7 @@ while true do
         if tFilters[k] == nil or tFilters[r] == event or event == "terminate" then
           local ok, param = coroutine.resume(r, event, p1, p2, p3, p4, p5)
           if not ok then
-            error(param)
+            log:Fatal(param)
           else
             tFilters[r] = param
           end

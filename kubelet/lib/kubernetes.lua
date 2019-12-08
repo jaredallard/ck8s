@@ -115,6 +115,25 @@ end
 ---
 
 function kubernetes:updateComputerStatus(status)
+  local status = {
+    status = {
+      phase = "Running",
+      nodeInfo = {
+        machineID = tostring(MACHINEID),
+        kernelVersion = os.version(),
+        kubeletVersion = KUBELETVERSION,
+        operatingSystem = "craftos",
+        architecture = "java",
+        systemUUID = MACHINEID,
+        osImage = os.version(),
+        bootID = string.lower(uuid.Generate()),
+
+        -- TODO(jaredallard): implement these fields
+        containerRuntimeVersion = "unsupported",
+        kubeProxyVersion = "unsupported",
+      }
+    }
+  }
   return kubernetes:patch("apis/computercraft.ck8sd.com/v1alpha1/namespaces/default/computers/"..MACHINEID.."/status", status)
 end
 
@@ -131,10 +150,11 @@ function kubernetes:registerComputer()
       name = MACHINEID,
     },
     spec = {
-      ID = os.getComputerID(),
+      id = os.getComputerID(),
     },
   }
 
+  print(json:encode_pretty(computer))
   return kubernetes:post("apis/computercraft.ck8sd.com/v1alpha1/namespaces/default/computers", computer)
 end
 
