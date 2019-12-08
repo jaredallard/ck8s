@@ -23,8 +23,8 @@ type ComputerPodSpec struct {
 	// ComputerType is a type of computer to run on
 	ComputerType ComputerType `json:"computerType,omitempty"`
 
-	// PastebinID is a pastebin ID to download code from
-	PastebinID string `json:"pastebinID,omitempty"`
+	// URL is a URL to download source code from
+	URL string `json:"url,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -5,4 +5,4 @@ metadata:
   name: my-pod
 spec:
   computerType: advanced
-  pastebinID: uHRTm9hp
+  url: https://gist.githubusercontent.com/jaredallard/2e6d625cac81270ebc27ab94c4d5dc5f/raw/574f6907ae1d67307696d2b27206d05e6d47fbeb/daemon.lua
