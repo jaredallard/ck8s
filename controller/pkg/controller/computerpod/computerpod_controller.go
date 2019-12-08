@@ -103,11 +103,32 @@ func (r *ReconcileComputerPod) Reconcile(request reconcile.Request) (reconcile.R
 	computers := &computercraftv1alpha1.ComputerList{}
 	namespace := client.InNamespace(pod.ObjectMeta.Namespace)
 
-	runningFields := map[string]string{
-		"status.phase": "Running",
+	// TODO(jaredallard): keep this stored in memory
+	computerpods := &computercraftv1alpha1.ComputerPodList{}
+	if err := r.client.List(context.TODO(), computers, namespace); err != nil {
+		reqLogger.Error(err, "failed to list computerpods")
 	}
 
-	if err := r.client.List(context.TODO(), computers, namespace, client.MatchingFields(runningFields)); err != nil {
+	// hash map of pods to computers
+	computerMap := map[string][]computercraftv1alpha1.ComputerPod{}
+	for _, k := range computerpods.Items {
+		comp := k.Status.AssignedComputer
+
+		// skip un-assigned computerpods
+		// TODO(jaredallard): filter this out at req time
+		if comp == "" {
+			continue
+		}
+
+		if computerMap[comp] == nil {
+			computerMap[comp] = make([]computercraftv1alpha1.ComputerPod, 1)
+		}
+
+		// note that this computer is running this pod, theoretically anyways
+		computerMap[comp] = append(computerMap[comp], k)
+	}
+
+	if err := r.client.List(context.TODO(), computers, namespace); err != nil {
 		pod.Status.Reason = "FailedSchedule"
 		pod.Status.Phase = "Pending"
 		pod.Status.Message = fmt.Sprintf("computerpod failed to schedule: %v", err.Error())
@@ -134,8 +155,31 @@ func (r *ReconcileComputerPod) Reconcile(request reconcile.Request) (reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	assignedComp := ""
 	for _, k := range computers.Items {
-		reqLogger.Info("considering machine", "name", k.Name)
+		// skip computers that aren't running
+		// TODO(jaredallard): filter this out at req time (fieldSelector?)
+		if k.Status.Phase != "Running" {
+			continue
+		}
+
+		reqLogger.Info("found running computer", "computer", k.Name)
+		if computerMap[k.Name] == nil || len(computerMap[k.Name]) == 0 {
+			assignedComp = k.Name
+			break
+		}
+	}
+
+	reqLogger.Info("assigned computerpod to computer", "computer", assignedComp, "computerpod", pod.Name)
+	pod.Status.AssignedComputer = assignedComp
+	pod.Status.Phase = "Pending"
+	pod.Status.Message = "Scheduled ComputerPod"
+	pod.Status.Reason = "Scheduled"
+	if err := r.client.Status().Patch(context.TODO(), pod, &statusPatcher); err != nil {
+		reqLogger.Error(err, "failed to update status of pod to signify scheduled")
+
+		// failed to assign this computerpod, so retry later
+		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
