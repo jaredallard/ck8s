@@ -3,6 +3,20 @@ kind: CustomResourceDefinition
 metadata:
   name: computerpods.computercraft.ck8sd.com
 spec:
+  additionalPrinterColumns:
+  - JSONPath: .status.phase
+    name: Status
+    type: string
+  - JSONPath: .status.assignedComputer
+    name: Assigned
+    type: string
+  - JSONPath: .metadata.creationTimestamp
+    description: CreationTimestamp is a timestamp representing the server time when
+      this object was created. It is not guaranteed to be set in happens-before order
+      across separate operations. Clients may not set this value. It is represented
+      in RFC3339 form and is in UTC.
+    name: Age
+    type: date
   group: computercraft.ck8sd.com
   names:
     kind: ComputerPod
@@ -30,9 +44,41 @@ spec:
           type: object
         spec:
           description: ComputerPodSpec defines the desired state of ComputerPod
+          properties:
+            computerType:
+              description: ComputerType is a type of computer to run on
+              type: string
+            url:
+              description: URL is a URL to download source code from
+              type: string
           type: object
         status:
-          description: ComputerPodStatus defines the observed state of ComputerPod
+          description: ComputerPodStatus represents information about the status of
+            a computerpod. Status may trail the actual state of a system, especially
+            if the node that hosts the computerpod cannot contact the control plane.
+          properties:
+            assignedComputer:
+              description: AssignedComputer is the computer resource that this ComputerPod
+                has been scheduled onto
+              type: string
+            message:
+              description: A human readable message indicating details about why the
+                computerpod is in this condition.
+              type: string
+            phase:
+              description: PodPhase is a label for the condition of a pod at the current
+                time.
+              type: string
+            reason:
+              description: A brief CamelCase message indicating details about why
+                the computerpod is in this state. e.g. 'Evicted'
+              type: string
+            startTime:
+              description: RFC 3339 date and time at which the object was acknowledged
+                by the Kubelet. This is before the Kubelet pulled the container image(s)
+                for the pod.
+              format: date-time
+              type: string
           type: object
       type: object
   version: v1alpha1

@@ -1,0 +1,11 @@
+apiVersion: computercraft.ck8sd.com/v1alpha1
+kind: ComputerDeployment
+metadata:
+  namespace: default
+  name: my-deployment
+spec:
+  replicas: 1
+  template:
+    spec:
+      computerType: advanced
+      url: https://gist.githubusercontent.com/jaredallard/2e6d625cac81270ebc27ab94c4d5dc5f/raw/574f6907ae1d67307696d2b27206d05e6d47fbeb/daemon.lua

@@ -100,6 +100,11 @@ func (r *ReconcileComputerPod) Reconcile(request reconcile.Request) (reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	// TODO(jaredallard): need to handle pods being edited better...
+	if pod.Status.Phase == "Running" {
+		return reconcile.Result{}, nil
+	}
+
 	computers := &computercraftv1alpha1.ComputerList{}
 	namespace := client.InNamespace(pod.ObjectMeta.Namespace)
 
