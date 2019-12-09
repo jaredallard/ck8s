@@ -126,16 +126,18 @@ func (r *ReconcileComputer) DetectDeadComputers() error {
 			err := r.client.Status().Patch(context.TODO(), &c, &jsonPatcher{})
 			if err != nil {
 				log.Error(err, "failed to mark computer unready", "computer", c.Name)
+				continue // TODO(jaredallard): better handling of errors here
 			}
-		}
 
-		for _, pod := range computerpods.Items {
-			if pod.Status.AssignedComputer == c.Name {
-				pod.Status.AssignedComputer = ""
-				pod.Status.Phase = corev1.PodPending
-				err := r.client.Status().Patch(context.TODO(), &pod, &jsonPatcher{})
-				if err != nil {
-					log.Error(err, "failed to remove pod from unready node")
+			for _, pod := range computerpods.Items {
+				if pod.Status.AssignedComputer == c.Name {
+					log.Info("marking computerpod as pending due to computer being unready", "pod", pod.Name)
+					pod.Status.AssignedComputer = ""
+					pod.Status.Phase = corev1.PodPending
+					err := r.client.Status().Patch(context.TODO(), &pod, &jsonPatcher{})
+					if err != nil {
+						log.Error(err, "failed to remove pod from unready node")
+					}
 				}
 			}
 		}
