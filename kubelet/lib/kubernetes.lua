@@ -114,7 +114,23 @@ end
 --- specific functions
 ---
 
-function kubernetes:updateComputerStatus(status)
+-- posts ready status to kubernetes
+function kubernetes:computerReady()
+  return kubernetes:patch("apis/computercraft.ck8sd.com/v1alpha1/namespaces/default/computers/"..MACHINEID.."/status", {
+    status = {
+      conditions = {
+        [1] = {
+          reason = "KubeletReady",
+          message = "kubelet is posting ready status",
+          type = "Ready",
+          status = "True",
+        }
+      }
+    }
+  })
+end
+
+function kubernetes:updateComputerStatus()
   local status = {
     status = {
       phase = "Running",
@@ -153,8 +169,6 @@ function kubernetes:registerComputer()
       id = os.getComputerID(),
     },
   }
-
-  print(json:encode_pretty(computer))
   return kubernetes:post("apis/computercraft.ck8sd.com/v1alpha1/namespaces/default/computers", computer)
 end
 

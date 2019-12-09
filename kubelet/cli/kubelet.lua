@@ -76,14 +76,14 @@ local function createPod(pod)
   -- TODO(jaredallard): have better support for things other than URLs
   if pod.spec.url == "" then
     log:Error("pod doesn't have a URL")
-    return nil
+    return nil, "invalid pod"
   end
 
   log:Info("downloading source code from pod url")
   local resp, err = http.get(pod.spec.url)
   if resp == nil then
     log:Error("failed to download source code: "..err)
-    return nil
+    return nil, "failed to download source"
   end
 
   local src = resp.readAll()
@@ -109,7 +109,9 @@ local function removePod(podID)
   local pod = runningPods[podID]
   local resp, err = kubernetes:updateComputerPodStatus(pod.metadata.name, {
     status = {
-      phase = "Terminated"
+      phase = "Terminated",
+      reason = "",
+      status = "Pod has terminated"
     }
   })
   if resp == nil then
@@ -127,6 +129,11 @@ end
 -- controlLoop handles the creation of new pods and the management of coroutines
 local function controlLoop()
   while true do
+    local resp, err = kubernetes:computerReady()
+    if resp == nil then
+      log:Warn("failed to post ready status: "..err)
+    end
+
     local resp, body = kubernetes:getComputerPods()
     if resp == nil then
       log:Warn("failed to list pods: "..body)
@@ -162,11 +169,18 @@ local function controlLoop()
         runningPods[podID] = pod
 
         -- TODO: update the kubernetes apiserver with the status of the pod
-        local r = createPod(pod)
+        local r, err = createPod(pod)
 
         log:Info("created pod "..podID)
         if r == nil then
           log:Warn("failed to run pod")
+          local resp, err = kubernetes:updateComputerPodStatus(pod.metadata.name, {
+            status = {
+              phase = "Failed",
+              reason = "FailedExecution",
+              message = "failed to create pod: "..err
+            }
+          })
         else
           _routines[podID] = r
           log:Info("started pod "..podID)
