@@ -57,7 +57,7 @@ type ComputerPodStatus struct {
 
 	// AssignedComputer is the computer resource that this ComputerPod has been scheduled onto
 	// +optional
-	AssignedComputer string `json:"assignedComputer" protobuf:"bytes,4,opt,name=assignedComputer"`
+	AssignedComputer string `json:"assignedComputer,omitempty" protobuf:"bytes,4,opt,name=assignedComputer"`
 
 	// RFC 3339 date and time at which the object was acknowledged by the Kubelet.
 	// This is before the Kubelet pulled the container image(s) for the pod.

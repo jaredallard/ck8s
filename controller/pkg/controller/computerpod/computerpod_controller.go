@@ -21,15 +21,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-type statusPatch struct{}
+type jsonPatcher struct{}
 
 // Type returns the MergePatchType
-func (s *statusPatch) Type() types.PatchType {
+func (s *jsonPatcher) Type() types.PatchType {
 	return types.MergePatchType
 }
 
 // Data returns the underlying patch data
-func (s *statusPatch) Data(obj runtime.Object) ([]byte, error) {
+func (s *jsonPatcher) Data(obj runtime.Object) ([]byte, error) {
 	return json.Marshal(obj)
 }
 
@@ -43,7 +43,11 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileComputerPod{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	cl, err := client.New(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme()})
+	if err != nil {
+		panic(err)
+	}
+	return &ReconcileComputerPod{client: mgr.GetClient(), scheme: mgr.GetScheme(), uncachedClient: cl}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -70,8 +74,17 @@ var _ reconcile.Reconciler = &ReconcileComputerPod{}
 type ReconcileComputerPod struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client client.Client
-	scheme *runtime.Scheme
+	client         client.Client
+	uncachedClient client.Client
+	scheme         *runtime.Scheme
+}
+
+// markAsFailed marks a computerpod as failed to schedule
+func markAsFailed(r *ReconcileComputerPod, pod *computercraftv1alpha1.ComputerPod, reason string) error {
+	pod.Status.Reason = "FailedSchedule"
+	pod.Status.Phase = "Pending"
+	pod.Status.Message = fmt.Sprintf("computerpod failed to schedule: %v", reason)
+	return r.client.Status().Patch(context.TODO(), pod, &jsonPatcher{})
 }
 
 // Reconcile reads that state of the cluster for a ComputerPod object and makes changes based on the state read
@@ -79,7 +92,7 @@ type ReconcileComputerPod struct {
 func (r *ReconcileComputerPod) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
-	statusPatcher := statusPatch{}
+	statusPatcher := jsonPatcher{}
 
 	// Fetch the ComputerPod instance
 	pod := &computercraftv1alpha1.ComputerPod{}
@@ -132,13 +145,9 @@ func (r *ReconcileComputerPod) Reconcile(request reconcile.Request) (reconcile.R
 
 	// TODO(jaredallard): make this a function
 	if err := r.client.List(context.TODO(), computers, namespace); err != nil {
-		reqLogger.Error(err, "failed to list coimputers")
-		pod.Status.Reason = "FailedSchedule"
-		pod.Status.Phase = "Pending"
-		pod.Status.Message = fmt.Sprintf("computerpod failed to schedule: %v", err.Error())
-		err := r.client.Status().Patch(context.TODO(), pod, &statusPatcher)
-		if err != nil {
-			reqLogger.Error(err, "failed to update status of pod for failed scheduling")
+		reqLogger.Error(err, "failed to list computers")
+		if err := markAsFailed(r, pod, err.Error()); err != nil {
+			reqLogger.Error(err, "failed to mark computerpod as failed schedule", "computer", pod.Name)
 		}
 
 		// Failed to list available computers, retry scheduling
@@ -147,16 +156,10 @@ func (r *ReconcileComputerPod) Reconcile(request reconcile.Request) (reconcile.R
 
 	// check if we had no candidates
 	if len(computers.Items) == 0 {
-		err := fmt.Errorf("no nodes returned")
-		reqLogger.Error(err, "failed to schedule")
-		pod.Status.Reason = "FailedSchedule"
-		pod.Status.Phase = "Pending"
-		pod.Status.Message = "computerpod failed to schedule: no nodes are available"
-
-		// update the pod
-		err = r.client.Status().Patch(context.TODO(), pod, &statusPatcher)
-		if err != nil {
-			reqLogger.Error(err, "failed to update status of pod for failed scheduling")
+		err := fmt.Errorf("no nodes exist")
+		reqLogger.Error(err, "")
+		if err := markAsFailed(r, pod, err.Error()); err != nil {
+			reqLogger.Error(err, "failed to mark computerpod as failed schedule", "computer", pod.Name)
 		}
 
 		// No available computers, retry scheduling
@@ -174,7 +177,7 @@ func (r *ReconcileComputerPod) Reconcile(request reconcile.Request) (reconcile.R
 		// skip computers that kubelet aren't ready on
 		kubeletReady := false
 		for _, cond := range k.Status.Conditions {
-			if cond.Reason == "KubeletReady" && cond.Status == corev1.ConditionTrue {
+			if cond.Type == "Ready" && cond.Status == corev1.ConditionTrue {
 				kubeletReady = true
 				break
 			}
@@ -194,15 +197,9 @@ func (r *ReconcileComputerPod) Reconcile(request reconcile.Request) (reconcile.R
 
 	if assignedComp == "" {
 		err := fmt.Errorf("no nodes available")
-		reqLogger.Error(err, "failed to schedule")
-		pod.Status.Reason = "FailedSchedule"
-		pod.Status.Phase = "Pending"
-		pod.Status.Message = "computerpod failed to schedule: no nodes are available"
-
-		// update the pod status
-		err = r.client.Status().Patch(context.TODO(), pod, &statusPatcher)
-		if err != nil {
-			reqLogger.Error(err, "failed to update status of pod for failed scheduling")
+		reqLogger.Error(err, "")
+		if err := markAsFailed(r, pod, err.Error()); err != nil {
+			reqLogger.Error(err, "failed to mark computerpod as failed schedule", "computer", pod.Name)
 		}
 
 		// No available computers, retry scheduling

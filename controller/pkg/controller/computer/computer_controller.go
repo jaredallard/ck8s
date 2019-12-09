@@ -167,11 +167,7 @@ func (r *ReconcileComputer) Reconcile(request reconcile.Request) (reconcile.Resu
 	// TODO(jaredallard): we need to detect when we've updated this field instead of just
 	// assuming that it has been
 	// maybe via an admission controller?
-	for i, cond := range comp.Status.Conditions {
-		// skip set to false conditions
-		if cond.Status == corev1.ConditionFalse {
-			continue
-		}
+	for i := range comp.Status.Conditions {
 		comp.Status.Conditions[i].LastHeartbeatTime = v1.NewTime(time.Now())
 	}
 

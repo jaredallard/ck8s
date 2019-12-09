@@ -4,7 +4,7 @@ metadata:
   name: computers.computercraft.ck8sd.com
 spec:
   additionalPrinterColumns:
-  - JSONPath: .status.conditions[?(@.type=="KubeletReady")].status
+  - JSONPath: .status.conditions[?(@.type=="Ready")].status
     name: Ready
     type: string
   - JSONPath: .metadata.creationTimestamp
