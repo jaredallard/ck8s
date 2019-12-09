@@ -134,6 +134,8 @@ func (r *ReconcileComputer) DetectDeadComputers() error {
 					log.Info("marking computerpod as pending due to computer being unready", "pod", pod.Name)
 					pod.Status.AssignedComputer = ""
 					pod.Status.Phase = corev1.PodPending
+					pod.Status.Reason = "ComputerUnready"
+					pod.Status.Message = "computer went unready"
 					err := r.client.Status().Patch(context.TODO(), &pod, &jsonPatcher{})
 					if err != nil {
 						log.Error(err, "failed to remove pod from unready node")
