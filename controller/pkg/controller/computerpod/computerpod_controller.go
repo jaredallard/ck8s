@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	computercraftv1alpha1 "github.com/cswarm/ck8sd/pkg/apis/computercraft/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -17,13 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
-
-//  patchStringValue specifies a patch operation for a string.
-type patchStringValue struct {
-	Op    string `json:"op"`
-	Path  string `json:"path"`
-	Value string `json:"value"`
-}
 
 type statusPatch struct{}
 
@@ -82,7 +78,6 @@ type ReconcileComputerPod struct {
 // and what is in the ComputerPod.Spec
 func (r *ReconcileComputerPod) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling ComputerPod")
 
 	statusPatcher := statusPatch{}
 
@@ -100,10 +95,12 @@ func (r *ReconcileComputerPod) Reconcile(request reconcile.Request) (reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	// TODO(jaredallard): need to handle pods being edited better...
-	if pod.Status.Phase == "Running" {
+	// ignore already scheduled pods
+	if pod.Status.AssignedComputer != "" {
 		return reconcile.Result{}, nil
 	}
+
+	reqLogger.Info("Reconciling ComputerPod")
 
 	computers := &computercraftv1alpha1.ComputerList{}
 	namespace := client.InNamespace(pod.ObjectMeta.Namespace)
@@ -133,7 +130,9 @@ func (r *ReconcileComputerPod) Reconcile(request reconcile.Request) (reconcile.R
 		computerMap[comp] = append(computerMap[comp], k)
 	}
 
+	// TODO(jaredallard): make this a function
 	if err := r.client.List(context.TODO(), computers, namespace); err != nil {
+		reqLogger.Error(err, "failed to list coimputers")
 		pod.Status.Reason = "FailedSchedule"
 		pod.Status.Phase = "Pending"
 		pod.Status.Message = fmt.Sprintf("computerpod failed to schedule: %v", err.Error())
@@ -148,16 +147,20 @@ func (r *ReconcileComputerPod) Reconcile(request reconcile.Request) (reconcile.R
 
 	// check if we had no candidates
 	if len(computers.Items) == 0 {
+		err := fmt.Errorf("no nodes returned")
+		reqLogger.Error(err, "failed to schedule")
 		pod.Status.Reason = "FailedSchedule"
 		pod.Status.Phase = "Pending"
 		pod.Status.Message = "computerpod failed to schedule: no nodes are available"
-		err := r.client.Status().Patch(context.TODO(), pod, &statusPatcher)
+
+		// update the pod
+		err = r.client.Status().Patch(context.TODO(), pod, &statusPatcher)
 		if err != nil {
 			reqLogger.Error(err, "failed to update status of pod for failed scheduling")
 		}
 
 		// No available computers, retry scheduling
-		return reconcile.Result{}, err
+		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 10}, nil
 	}
 
 	assignedComp := ""
@@ -168,18 +171,51 @@ func (r *ReconcileComputerPod) Reconcile(request reconcile.Request) (reconcile.R
 			continue
 		}
 
+		// skip computers that kubelet aren't ready on
+		kubeletReady := false
+		for _, cond := range k.Status.Conditions {
+			if cond.Reason == "KubeletReady" && cond.Status == corev1.ConditionTrue {
+				kubeletReady = true
+				break
+			}
+		}
+		if !kubeletReady {
+			continue
+		}
+
 		reqLogger.Info("found running computer", "computer", k.Name)
+
+		// don't assign more than one pod to a host right now
 		if computerMap[k.Name] == nil || len(computerMap[k.Name]) == 0 {
 			assignedComp = k.Name
 			break
 		}
 	}
 
+	if assignedComp == "" {
+		err := fmt.Errorf("no nodes available")
+		reqLogger.Error(err, "failed to schedule")
+		pod.Status.Reason = "FailedSchedule"
+		pod.Status.Phase = "Pending"
+		pod.Status.Message = "computerpod failed to schedule: no nodes are available"
+
+		// update the pod status
+		err = r.client.Status().Patch(context.TODO(), pod, &statusPatcher)
+		if err != nil {
+			reqLogger.Error(err, "failed to update status of pod for failed scheduling")
+		}
+
+		// No available computers, retry scheduling
+		return reconcile.Result{Requeue: true, RequeueAfter: time.Second * 10}, nil
+	}
+
 	reqLogger.Info("assigned computerpod to computer", "computer", assignedComp, "computerpod", pod.Name)
 	pod.Status.AssignedComputer = assignedComp
 	pod.Status.Phase = "Pending"
-	pod.Status.Message = "Scheduled ComputerPod"
+	pod.Status.Message = fmt.Sprintf("scheduled computer pod onto %s", assignedComp)
 	pod.Status.Reason = "Scheduled"
+	ack := v1.NewTime(time.Now())
+	pod.Status.StartTime = &ack
 	if err := r.client.Status().Patch(context.TODO(), pod, &statusPatcher); err != nil {
 		reqLogger.Error(err, "failed to update status of pod to signify scheduled")
 
@@ -187,5 +223,6 @@ func (r *ReconcileComputerPod) Reconcile(request reconcile.Request) (reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	reqLogger.Info("finished scheduling pod")
 	return reconcile.Result{}, nil
 }

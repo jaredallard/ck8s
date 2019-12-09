@@ -6,8 +6,8 @@ import (
 
 	computercraftv1alpha1 "github.com/cswarm/ck8sd/pkg/apis/computercraft/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -91,6 +91,7 @@ func (r *ReconcileComputerDeployment) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
+	// TODO(jaredallard): support scaling down a deployment
 	for i := 0; (int64(i) - 1) != deployment.Spec.Replicas; i++ {
 		// Define a new Pod object
 		pod := computercraftv1alpha1.ComputerPod{
