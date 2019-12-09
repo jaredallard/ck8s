@@ -5,10 +5,15 @@ import (
 	"strconv"
 
 	computercraftv1alpha1 "github.com/cswarm/ck8sd/pkg/apis/computercraft/v1alpha1"
+	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -29,7 +34,19 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileComputerDeployment{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	// TODO(jaredallard): just implement eventsinkimpl s
+	client, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		log.Error(err, "failed to create kubernetes client")
+	}
+
+	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartRecordingToSink(&corev1.EventSinkImpl{Interface: client.CoreV1().Events("")})
+	return &ReconcileComputerDeployment{
+		client:   mgr.GetClient(),
+		scheme:   mgr.GetScheme(),
+		recorder: eventBroadcaster.NewRecorder(scheme.Scheme, core.EventSource{Component: "ck8s-controller"}),
+	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -66,8 +83,9 @@ var _ reconcile.Reconciler = &ReconcileComputerDeployment{}
 type ReconcileComputerDeployment struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client client.Client
-	scheme *runtime.Scheme
+	client   client.Client
+	recorder record.EventRecorder
+	scheme   *runtime.Scheme
 }
 
 // Reconcile reads that state of the cluster for a ComputerDeployment object and makes changes based on the state read

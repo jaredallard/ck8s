@@ -6,11 +6,15 @@ import (
 	"time"
 
 	computercraftv1alpha1 "github.com/cswarm/ck8sd/pkg/apis/computercraft/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
+	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -42,7 +46,19 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) *ReconcileComputer {
-	return &ReconcileComputer{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	// TODO(jaredallard): just implement eventsinkimpl s
+	client, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		log.Error(err, "failed to create kubernetes client")
+	}
+
+	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartRecordingToSink(&corev1.EventSinkImpl{Interface: client.CoreV1().Events("")})
+	return &ReconcileComputer{
+		client:   mgr.GetClient(),
+		scheme:   mgr.GetScheme(),
+		recorder: eventBroadcaster.NewRecorder(scheme.Scheme, core.EventSource{Component: "ck8s-controller"}),
+	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -76,12 +92,13 @@ var _ reconcile.Reconciler = &ReconcileComputer{}
 type ReconcileComputer struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client client.Client
-	scheme *runtime.Scheme
+	client   client.Client
+	recorder record.EventRecorder
+	scheme   *runtime.Scheme
 }
 
 // find the kublet ready condition
-func getReadyCondition(c []corev1.NodeCondition) (int, *corev1.NodeCondition) {
+func getReadyCondition(c []core.NodeCondition) (int, *core.NodeCondition) {
 	for i, cond := range c {
 		if cond.Reason == "KubeletReady" {
 			return i, &cond
@@ -112,7 +129,7 @@ func (r *ReconcileComputer) DetectDeadComputers() error {
 
 		// TODO(jaredallard): invalidate all pods running on that node
 		// for now, we're just skipping those that are invalid
-		if ready.Status == corev1.ConditionFalse {
+		if ready.Status == core.ConditionFalse {
 			continue
 		}
 
@@ -120,7 +137,7 @@ func (r *ReconcileComputer) DetectDeadComputers() error {
 		killTime := v1.NewTime(now.Add(-(time.Minute * 1)))
 
 		if ready.LastHeartbeatTime.Before(&killTime) {
-			c.Status.Conditions[ri].Status = corev1.ConditionFalse
+			c.Status.Conditions[ri].Status = core.ConditionFalse
 
 			log.Info("computer hasn't pinged in configured time period, assuming unready", "computer", c.Name)
 			err := r.client.Status().Patch(context.TODO(), &c, &jsonPatcher{})
@@ -133,13 +150,15 @@ func (r *ReconcileComputer) DetectDeadComputers() error {
 				if pod.Status.AssignedComputer == c.Name {
 					log.Info("marking computerpod as pending due to computer being unready", "pod", pod.Name)
 					pod.Status.AssignedComputer = ""
-					pod.Status.Phase = corev1.PodPending
+					pod.Status.Phase = core.PodPending
 					pod.Status.Reason = "ComputerUnready"
 					pod.Status.Message = "computer went unready"
 					err := r.client.Status().Patch(context.TODO(), &pod, &jsonPatcher{})
 					if err != nil {
 						log.Error(err, "failed to remove pod from unready node")
 					}
+
+					r.recorder.Eventf(&pod, core.EventTypeWarning, "ComputerUnready", "computer '%s' went unready", c.Name)
 				}
 			}
 		}
