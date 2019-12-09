@@ -111,7 +111,7 @@ local function removePod(podID)
     status = {
       phase = "Terminated",
       reason = "",
-      status = "Pod has terminated"
+      message = "Pod has terminated"
     }
   })
   if resp == nil then
@@ -189,6 +189,10 @@ local function controlLoop()
           if resp == nil then
             log:Warn("failed to notify k8s of failed pod: "..err)
           end
+
+          -- HACK: allows us to re-run the pod in the next control loop
+          -- we should add back-off logic here, or something better
+          runningPods[podID] = nil
         else
           _routines[podID] = r
           log:Info("started pod "..podID)
