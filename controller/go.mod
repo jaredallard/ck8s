@@ -3,13 +3,20 @@ module github.com/cswarm/ck8sd
 go 1.13
 
 require (
-	github.com/go-openapi/spec v0.19.0
+	github.com/go-openapi/spec v0.19.3
+	github.com/onsi/ginkgo v1.10.1 // indirect
+	github.com/onsi/gomega v1.7.0 // indirect
 	github.com/operator-framework/operator-sdk v0.12.0
-	github.com/spf13/pflag v1.0.3
+	github.com/spf13/pflag v1.0.5
+	github.com/stretchr/testify v1.4.0 // indirect
+	golang.org/x/sys v0.0.0-20190826190057-c7b8b68b1456 // indirect
+	gopkg.in/yaml.v2 v2.2.4 // indirect
 	k8s.io/api v0.0.0
 	k8s.io/apimachinery v0.0.0
 	k8s.io/client-go v11.0.0+incompatible
-	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d
+	k8s.io/klog v1.0.0 // indirect
+	k8s.io/kube-openapi v0.0.0-20191107075043-30be4d16710a
+	k8s.io/utils v0.0.0-20191114184206-e782cd3c129f // indirect
 	sigs.k8s.io/controller-runtime v0.3.0
 )
 
