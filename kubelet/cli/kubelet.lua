@@ -124,6 +124,12 @@ local function removePod(podID)
 
   -- remove the pod from the in-memory store so that we don't handle it anymore
   runningPods[podID] = nil
+
+  -- check if we have source code
+  local srcFile = "/tmp/src/"..pod.metadata.uid..".lua"
+  if fs.exists(srcFile) then
+    fs.delete(srcFile)
+  end
 end
 
 -- controlLoop handles the creation of new pods and the management of coroutines
@@ -168,7 +174,6 @@ local function controlLoop()
         -- track that the pod is running in-memory
         runningPods[podID] = pod
 
-        -- TODO: update the kubernetes apiserver with the status of the pod
         local r, err = createPod(pod)
 
         log:Info("created pod "..podID)
@@ -181,6 +186,9 @@ local function controlLoop()
               message = "failed to create pod: "..err
             }
           })
+          if resp == nil then
+            log:Warn("failed to notify k8s of failed pod: "..err)
+          end
         else
           _routines[podID] = r
           log:Info("started pod "..podID)
@@ -202,13 +210,19 @@ while true do
   for k, r in pairs(_routines) do
     if r then
       if r and coroutine.status(r) == "dead" then
-        -- TODO(jaredallard): handle dead coroutine
         removePod(k)
       else
         if tFilters[k] == nil or tFilters[r] == event or event == "terminate" then
           local ok, param = coroutine.resume(r, event, p1, p2, p3, p4, p5)
           if not ok then
-            log:Fatal(param)
+            log:Info("caught terminate signal, cleaning up")
+            for k in pairs(_routines) do
+              -- skip main control loop
+              if k ~= "main" then
+                removePod(k)
+              end
+            end
+            error(param)
           else
             tFilters[r] = param
           end
