@@ -152,7 +152,6 @@ func (r *ReconcileComputer) DetectDeadComputers() error {
 // and what is in the Computer.Spec
 func (r *ReconcileComputer) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling Computer")
 
 	// Fetch the Computer instance
 	comp := &computercraftv1alpha1.Computer{}
@@ -176,7 +175,7 @@ func (r *ReconcileComputer) Reconcile(request reconcile.Request) (reconcile.Resu
 	}
 
 	if err := r.client.Status().Patch(context.TODO(), comp, &jsonPatcher{}); err != nil {
-		log.Error(err, "failed to update computer conditions status", "computer", comp.Name)
+		reqLogger.Error(err, "failed to update computer conditions status", "computer", comp.Name)
 
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
