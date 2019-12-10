@@ -5,15 +5,18 @@ This component handles registering the CRDs and handling the scheduling of pods 
 
 ## Installation
 
-TODO
-
 ```bash
 $ kubectl create -f ./deploy 
+
 # add the ca certificate to your certificate store
+$ export JAVA_HOME="$(dirname $(dirname $(readlink -f $(command -v java))) | sed 's/\/jre//')"
 $ kubectl get secret "$(kubectl get serviceaccount ck8sd-computers -ojsonpath='{.secrets[0].name}')" \
    -ogo-template='{{index .data "ca.crt" | base64decode }}' > /tmp/kube.crt
-# TODO: Instructions for CA cert addition
+$ keytool -importcert -file /tmp/kube.crt -keystore cacerts
+# password is: changeit
 ```
+
+Now you have the controller running, and have trusted the ca provided!
 
 ## Types
 
