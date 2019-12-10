@@ -73,4 +73,4 @@ Session.vim
 tags
 # End of https://www.gitignore.io/api/go,vim,emacs,visualstudiocode
 tmp
-bin
+bin/ck8sd
