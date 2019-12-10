@@ -129,7 +129,7 @@ func (r *ReconcileComputer) DetectDeadComputers() error {
 
 		// TODO(jaredallard): invalidate all pods running on that node
 		// for now, we're just skipping those that are invalid
-		if ready.Status == core.ConditionFalse {
+		if ready == nil || ready.Status == core.ConditionFalse {
 			continue
 		}
 
