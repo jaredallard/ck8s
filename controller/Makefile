@@ -49,10 +49,7 @@ gobuild:
 
 .PHONY: docker-build
 docker-build:
-	@echo " ===> building docker image <==="
-	@ssh-add -L
-	@echo " ===> If you run into credential issues, ensure that your key is in your SSH agent (ssh-add <ssh-key-path>) <==="
-	DOCKER_BUILDKIT=1 docker build --ssh default -t codegen -f deployments/codegen/Dockerfile . --build-arg VERSION=${VERSION} 
+	DOCKER_BUILDKIT=1 docker build --ssh default -t ck8sd-controller -f build/Dockerfile . --build-arg VERSION=${VERSION} 
 
 .PHONY: fmt
 fmt:

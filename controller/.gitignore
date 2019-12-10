@@ -72,5 +72,7 @@ Session.vim
 # auto-generated tag files
 tags
 # End of https://www.gitignore.io/api/go,vim,emacs,visualstudiocode
+
 tmp
-bin/ck8sd
+bin
+vendor

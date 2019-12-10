@@ -1,15 +1,25 @@
-FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
+# syntax=docker/dockerfile:1.0.0-experimental
+FROM golang:1.13-alpine3.10 AS builder
 
-ENV OPERATOR=/usr/local/bin/controller \
-    USER_UID=1001 \
-    USER_NAME=controller
+ENV GO111MODULE on
+ENV GOPROXY https://proxy.golang.org
 
-# install operator binary
-COPY build/_output/bin/controller ${OPERATOR}
+WORKDIR /src/app
 
-COPY build/bin /usr/local/bin
-RUN  /usr/local/bin/user_setup
+# Build deps
+RUN apk add --no-cache --update git make bash ca-certificates
 
-ENTRYPOINT ["/usr/local/bin/entrypoint"]
+# copy over deps
+COPY go.mod go.sum ./
+RUN go mod download
 
-USER ${USER_UID}
+# copy over the rest
+COPY . /src/app
+
+# build binaries
+RUN make CGO_ENABLED=0
+
+FROM alpine:3.10
+ENTRYPOINT ["/usr/bin/ck8sd"]
+RUN apk add --no-cache ca-certificates
+COPY --from=builder /src/app/bin/ck8sd /usr/bin/ck8sd

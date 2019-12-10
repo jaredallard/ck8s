@@ -16,9 +16,7 @@ spec:
       containers:
         - name: ck8sd
           # Replace this with the built image name
-          image: REPLACE_IMAGE
-          command:
-          - controller
+          image: cswarm/ck8sd
           imagePullPolicy: Always
           resources:
             requests:
