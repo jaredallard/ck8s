@@ -12,6 +12,7 @@ $ kubectl create -f ./deploy
 $ export JAVA_HOME="$(dirname $(dirname $(readlink -f $(command -v java))) | sed 's/\/jre//')"
 $ kubectl get secret "$(kubectl get serviceaccount ck8sd-computers -ojsonpath='{.secrets[0].name}')" \
    -ogo-template='{{index .data "ca.crt" | base64decode }}' > /tmp/kube.crt
+$ cd "$JAVA_HOME/jre/lib/security"
 $ keytool -importcert -file /tmp/kube.crt -keystore cacerts
 # password is: changeit
 ```
