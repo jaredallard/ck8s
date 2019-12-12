@@ -3,7 +3,9 @@ GO             ?= go
 PKG            := go mod vendor
 LDFLAGS        := -w -s
 GOFLAGS        :=
-GOPRIVATE      := 
+GOPRIVATE      :=
+GOOS           :=
+GOARCH         :=
 GOPROXY        := https://proxy.golang.org
 GO_EXTRA_FLAGS := -v
 TAGS           :=
@@ -45,7 +47,7 @@ gogenerate:
 .PHONY: gobuild
 gobuild:
 	@echo " ===> building releases in ./bin/... <=== "
-	GOPROXY=$(GOPROXY) GOPRIVATE=$(GOPRIVATE) CGO_ENABLED=$(CGO_ENABLED) $(GO) build -o $(BINDIR)/$(BIN_NAME) -ldflags "$(LDFLAGS)" $(GO_EXTRA_FLAGS) $(PKGDIR)/cmd/manager
+	GOOS=$(GOOS) GOARCH=$(GOARCH) GOPROXY=$(GOPROXY) GOPRIVATE=$(GOPRIVATE) CGO_ENABLED=$(CGO_ENABLED) $(GO) build -o $(BINDIR)/$(BIN_NAME) -ldflags "$(LDFLAGS)" $(GO_EXTRA_FLAGS) $(PKGDIR)/cmd/manager
 
 .PHONY: docker-build
 docker-build:

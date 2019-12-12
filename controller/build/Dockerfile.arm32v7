@@ -1,0 +1,32 @@
+# syntax=docker/dockerfile:1.0.0-experimental
+FROM golang:1.13-alpine3.10 AS builder
+
+ENV GO111MODULE on
+ENV GOPROXY https://proxy.golang.org
+
+WORKDIR /src/app
+
+# Build deps
+RUN apk add --no-cache --update git make bash ca-certificates curl
+
+# copy over deps
+COPY go.mod go.sum ./
+RUN go mod download
+
+# copy over the rest
+COPY . /src/app
+
+# build binaries
+RUN make GOOS=linux GOARCH=arm CGO_ENABLED=0
+
+# While we're here in amd64, download the qemu-arm-static binary for the arm image in the next build step
+RUN curl -L https://github.com/balena-io/qemu/releases/download/v3.0.0%2Bresin/qemu-3.0.0+resin-arm.tar.gz | tar zxvf - -C . && mv qemu-3.0.0+resin-arm/qemu-arm-static /tmp/
+
+
+FROM arm32v7/alpine:3.10
+ENTRYPOINT ["/usr/bin/ck8sd"]
+COPY --from=builder /tmp/qemu-arm-static /usr/bin
+
+RUN apk add --no-cache ca-certificates
+
+COPY --from=builder /src/app/bin/ck8sd /usr/bin/ck8sd
